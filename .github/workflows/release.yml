@@ -1,0 +1,109 @@
+name: Build and publish Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+
+      - name: Verify source and parser
+        shell: pwsh
+        run: |
+          python -m py_compile PhoneLinkOtpAutofill.py test_parser.py
+          python test_parser.py
+
+      - name: Verify release version
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $match = Select-String `
+            -Path PhoneLinkOtpAutofill.py `
+            -Pattern '^VERSION = "([^"]+)"$'
+
+          if (-not $match) {
+            throw "VERSION was not found in PhoneLinkOtpAutofill.py"
+          }
+
+          $expectedTag = "v$($match.Matches[0].Groups[1].Value)"
+          if ("${{ github.ref_name }}" -ne $expectedTag) {
+            throw "Tag ${{ github.ref_name }} does not match app version $expectedTag"
+          }
+
+      - name: Build executable
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            PhoneLinkOtpAutofill.spec
+
+      - name: Smoke-test executable
+        shell: pwsh
+        run: |
+          $process = Start-Process `
+            -FilePath "dist\PhoneLinkOtpAutofill.exe" `
+            -ArgumentList "--smoke-test" `
+            -WindowStyle Hidden `
+            -Wait `
+            -PassThru
+
+          if ($process.ExitCode -ne 0) {
+            throw "Executable smoke test failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Generate checksum
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash `
+            -Algorithm SHA256 `
+            dist\PhoneLinkOtpAutofill.exe
+
+          "$($hash.Hash.ToLower())  PhoneLinkOtpAutofill.exe" |
+            Set-Content `
+              -Encoding ascii `
+              dist\SHA256SUMS.txt
+
+      - name: Store manual build artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoneLinkOtpAutofill-win-x64
+          path: |
+            dist/PhoneLinkOtpAutofill.exe
+            dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "dist/PhoneLinkOtpAutofill.exe" `
+            "dist/SHA256SUMS.txt" `
+            --verify-tag `
+            --generate-notes `
+            --title "Phone Link OTP Autofill ${{ github.ref_name }}"
