@@ -50,6 +50,13 @@ class SelectPhoneLinkWindowTests(unittest.TestCase):
 
         self.assertEqual(select_phone_link_window(windows), (None, None))
 
+    def test_rejects_phone_link_splash_screen(self):
+        windows = [
+            (0x4002, "SplashScreen loading", "phoneexperiencehost.exe"),
+        ]
+
+        self.assertEqual(select_phone_link_window(windows), (None, None))
+
     def test_returns_none_when_no_phone_link_window_exists(self):
         windows = [
             (0x5001, "招聘网站", "chrome.exe"),

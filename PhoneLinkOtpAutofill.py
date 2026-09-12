@@ -30,7 +30,7 @@ import uiautomation as auto
 
 APP_NAME = "PhoneLinkOtpAutofill"
 APP_DISPLAY_NAME = "Phone Link 验证码自动填写"
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE_NAME = APP_NAME
 ERROR_ALREADY_EXISTS = 183
@@ -43,6 +43,8 @@ DEFAULT_CONFIG = {
     "poll_interval": 0.35,
     "pending_seconds": 15.0,
     "otp_cooldown_seconds": 120.0,
+    "detected_code_cooldown_seconds": 300.0,
+    "baseline_settle_seconds": 5.0,
     "notify_on_fill": True,
     "show_code_in_notification": False,
     "ignore_existing_on_start": True,
@@ -64,6 +66,7 @@ DEFAULT_CONFIG = {
 PHONE_LINK_TITLE_HINTS = ("手机连接", "Phone Link")
 PHONE_LINK_PROCESSES = {"phoneexperiencehost.exe"}
 LEGACY_PHONE_LINK_HOST_PROCESSES = {"applicationframehost.exe"}
+PHONE_LINK_IGNORED_TITLE_PREFIXES = ("splashscreen",)
 BROWSER_CLASSES = {"Chrome_WidgetWin_1", "MozillaWindowClass"}
 BLOCKED_FOCUS_TYPES = {
     "ButtonControl",
@@ -311,7 +314,12 @@ def select_phone_link_window(
     windows: list[tuple[int, str, str]],
 ) -> tuple[Optional[int], Optional[str]]:
     for hwnd, title, process in windows:
-        if process.lower() in PHONE_LINK_PROCESSES:
+        normalized_title = title.strip().casefold()
+        is_transient = any(
+            normalized_title.startswith(prefix)
+            for prefix in PHONE_LINK_IGNORED_TITLE_PREFIXES
+        )
+        if process.lower() in PHONE_LINK_PROCESSES and not is_transient:
             return hwnd, title
 
     exact_titles = {hint.casefold() for hint in PHONE_LINK_TITLE_HINTS}
@@ -490,8 +498,10 @@ class OtpAutofillApp:
         self.phone = None
         self.phone_hwnd: Optional[int] = None
         self.seen_texts: set[str] = set()
+        self.observed_codes: dict[str, float] = {}
         self.filled_codes: dict[str, float] = {}
         self.pending: Optional[tuple[str, float, str]] = None
+        self.baseline_settle_until = 0.0
         self.status = "正在启动"
         self.icon = pystray.Icon(
             APP_NAME,
@@ -653,10 +663,59 @@ class OtpAutofillApp:
             return
         texts = collect_texts(self.phone)
         if bool(self.config.get("ignore_existing_on_start", True)):
-            self.seen_texts = set(texts)
+            self.seen_texts = set()
+            self._absorb_baseline(texts)
+            settle_seconds = max(
+                0.0,
+                float(self.config.get("baseline_settle_seconds", 5.0)),
+            )
+            self.baseline_settle_until = time.monotonic() + settle_seconds
         else:
             self.seen_texts = set()
+            self.baseline_settle_until = 0.0
         LOGGER.info("初始 UI 文本基线=%d 段", len(self.seen_texts))
+
+    def _absorb_baseline(self, texts: list[str]) -> None:
+        observed_at = time.monotonic()
+        for text in texts:
+            self.seen_texts.add(text)
+            code = extract_otp(text)
+            if code:
+                self.observed_codes[code] = observed_at
+
+    def _process_text_snapshot(self, current_texts: list[str]) -> None:
+        if time.monotonic() < self.baseline_settle_until:
+            self._absorb_baseline(current_texts)
+            return
+
+        for text in current_texts:
+            if text in self.seen_texts:
+                continue
+            self.seen_texts.add(text)
+            self._handle_new_text(text)
+
+    def _disconnect_phone_link(self) -> None:
+        self.phone = None
+        self.phone_hwnd = None
+        self.pending = None
+        self.baseline_settle_until = 0.0
+
+    def _recently_observed(self, code: str) -> tuple[bool, float]:
+        cooldown = max(
+            0.0,
+            float(self.config.get("detected_code_cooldown_seconds", 300.0)),
+        )
+        now = time.monotonic()
+        last = self.observed_codes.get(code)
+        if last is None:
+            return False, 0.0
+
+        elapsed = now - last
+        if cooldown == 0.0 or elapsed >= cooldown:
+            self.observed_codes.pop(code, None)
+            return False, elapsed
+
+        return True, elapsed
 
     def _recently_filled(self, code: str) -> tuple[bool, float]:
         cooldown = max(
@@ -687,6 +746,15 @@ class OtpAutofillApp:
                 elapsed,
             )
             return
+        duplicate, elapsed = self._recently_observed(code)
+        if duplicate:
+            LOGGER.info(
+                "忽略已检测验证码 %s / 距首次检测 %.1f 秒",
+                mask_code(code),
+                elapsed,
+            )
+            return
+        self.observed_codes[code] = time.monotonic()
         sender = extract_sender(text)
         deadline = time.time() + float(self.config.get("pending_seconds", 15.0))
         self.pending = (code, deadline, text)
@@ -737,7 +805,7 @@ class OtpAutofillApp:
             return
 
         type_digits(code)
-        self.filled_codes[code] = time.monotonic()
+        self._record_successful_fill(code)
         sender = extract_sender(source)
         LOGGER.info(
             "已填写验证码 %s / browser=%s / focus=%s",
@@ -754,6 +822,16 @@ class OtpAutofillApp:
             else:
                 msg = f"{sender}验证码已自动填写"
             self._notify(msg)
+
+    def _record_successful_fill(
+        self,
+        code: str,
+        filled_at: Optional[float] = None,
+    ) -> None:
+        self.observed_codes.pop(code, None)
+        self.filled_codes[code] = (
+            time.monotonic() if filled_at is None else filled_at
+        )
 
     def _worker_loop_inner(self):
         LOGGER.info("后台监听线程启动，版本=%s", VERSION)
@@ -778,8 +856,7 @@ class OtpAutofillApp:
                     last_hwnd_check = now
                     if not self.phone_hwnd or not user32.IsWindow(self.phone_hwnd):
                         LOGGER.info("Phone Link 窗口已失效，准备重新连接")
-                        self.phone = None
-                        self.phone_hwnd = None
+                        self._disconnect_phone_link()
                         baseline_done = False
                         continue
 
@@ -788,11 +865,7 @@ class OtpAutofillApp:
                     baseline_done = True
 
                 current_texts = collect_texts(self.phone)
-                for text in current_texts:
-                    if text in self.seen_texts:
-                        continue
-                    self.seen_texts.add(text)
-                    self._handle_new_text(text)
+                self._process_text_snapshot(current_texts)
 
                 if len(self.seen_texts) > 5000:
                     self.seen_texts = set(current_texts)

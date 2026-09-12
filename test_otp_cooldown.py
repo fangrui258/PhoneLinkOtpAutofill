@@ -15,6 +15,7 @@ class OtpCooldownTests(unittest.TestCase):
             "smart_focus_guard": True,
             "notify_on_fill": False,
         }
+        app.observed_codes = {}
         app.filled_codes = {}
         app.pending = None
         app.paused_until = 0.0

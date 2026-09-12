@@ -126,6 +126,8 @@ GitHub Actions 也会使用 Windows 和 Python 3.10 构建。向 GitHub 推送�
   "poll_interval": 0.35,
   "pending_seconds": 15.0,
   "otp_cooldown_seconds": 120.0,
+  "detected_code_cooldown_seconds": 300.0,
+  "baseline_settle_seconds": 5.0,
   "notify_on_fill": true,
   "show_code_in_notification": false,
   "ignore_existing_on_start": true
@@ -133,6 +135,8 @@ GitHub Actions 也会使用 Windows 和 Python 3.10 构建。向 GitHub 推送�
 ```
 
 `otp_cooldown_seconds` 用于阻止 Phone Link 的多个 UI 文本节点重复触发同一个验证码。只有真正完成键盘输入后才开始计时；默认 120 秒后允许相同数字再次填写。
+
+`baseline_settle_seconds` 会在 Phone Link 刚打开或重新连接时持续吸收延迟加载的历史 UI 文本，默认 5 秒内不触发填写。`detected_code_cooldown_seconds` 会在 300 秒内阻止未填写的历史验证码因不同 UI 节点再次进入等待队列；验证码真正填写后仍以 120 秒填写冷却为准。
 
 ### 自定义浏览器
 

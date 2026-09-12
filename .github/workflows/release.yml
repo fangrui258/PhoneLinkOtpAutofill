@@ -32,10 +32,12 @@ jobs:
       - name: Verify source and parser
         shell: pwsh
         run: |
-          python -m py_compile PhoneLinkOtpAutofill.py test_parser.py test_phone_link_window.py test_otp_cooldown.py
+          python -m py_compile PhoneLinkOtpAutofill.py test_parser.py test_phone_link_window.py test_otp_cooldown.py test_history_guard.py test_version_info.py
           python test_parser.py
           python test_phone_link_window.py
           python test_otp_cooldown.py
+          python test_history_guard.py
+          python test_version_info.py
 
       - name: Verify release version
         if: github.ref_type == 'tag'
@@ -103,9 +105,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $releaseNotes = @"
+          Version: ${{ github.ref_name }}
+          Platform: Windows 10/11 x64
+          Package: Self-contained EXE; Python and Anaconda are not required.
+          "@
+
           gh release create "${{ github.ref_name }}" `
             "dist/PhoneLinkOtpAutofill.exe" `
             "dist/SHA256SUMS.txt" `
             --verify-tag `
             --generate-notes `
+            --notes $releaseNotes `
             --title "Phone Link OTP Autofill ${{ github.ref_name }}"
