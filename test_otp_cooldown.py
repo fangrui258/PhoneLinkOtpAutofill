@@ -15,7 +15,6 @@ class OtpCooldownTests(unittest.TestCase):
             "smart_focus_guard": True,
             "notify_on_fill": False,
         }
-        app.observed_codes = {}
         app.filled_codes = {}
         app.pending = None
         app.paused_until = 0.0
@@ -47,6 +46,17 @@ class OtpCooldownTests(unittest.TestCase):
         self.assertFalse(duplicate)
         self.assertEqual(elapsed, 120.0)
         self.assertNotIn("123456", app.filled_codes)
+
+    def test_timed_out_code_can_be_detected_again_from_a_different_text_node(self):
+        app = self.make_app()
+        app.pending = ("123456", 100.0, "验证码 123456")
+
+        with patch.object(otp.time, "time", return_value=101.0):
+            app._try_fill_pending()
+
+        self.assertIsNone(app.pending)
+        app._handle_new_text("【测试】您的验证码为123456")
+        self.assertEqual(app.pending[0], "123456")
 
     def test_zero_cooldown_disables_duplicate_filter(self):
         app = self.make_app()

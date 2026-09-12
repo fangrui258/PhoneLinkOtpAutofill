@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 4, 0),
-    prodvers=(1, 0, 4, 0),
+    filevers=(1, 0, 5, 0),
+    prodvers=(1, 0, 5, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'fangrui258'),
           StringStruct('FileDescription', 'Phone Link OTP Autofill'),
-          StringStruct('FileVersion', '1.0.4'),
+          StringStruct('FileVersion', '1.0.5'),
           StringStruct('InternalName', 'PhoneLinkOtpAutofill'),
           StringStruct('LegalCopyright', 'Copyright (c) 2026 fangrui258'),
-          StringStruct('OriginalFilename', 'PhoneLinkOtpAutofill-v1.0.4.exe'),
+          StringStruct('OriginalFilename', 'PhoneLinkOtpAutofill-v1.0.5.exe'),
           StringStruct('ProductName', 'Phone Link OTP Autofill'),
-          StringStruct('ProductVersion', '1.0.4')
+          StringStruct('ProductVersion', '1.0.5')
         ]
       )
     ]),
