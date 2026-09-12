@@ -32,9 +32,10 @@ jobs:
       - name: Verify source and parser
         shell: pwsh
         run: |
-          python -m py_compile PhoneLinkOtpAutofill.py test_parser.py test_phone_link_window.py
+          python -m py_compile PhoneLinkOtpAutofill.py test_parser.py test_phone_link_window.py test_otp_cooldown.py
           python test_parser.py
           python test_phone_link_window.py
+          python test_otp_cooldown.py
 
       - name: Verify release version
         if: github.ref_type == 'tag'

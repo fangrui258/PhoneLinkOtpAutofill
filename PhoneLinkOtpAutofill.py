@@ -30,7 +30,7 @@ import uiautomation as auto
 
 APP_NAME = "PhoneLinkOtpAutofill"
 APP_DISPLAY_NAME = "Phone Link 验证码自动填写"
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE_NAME = APP_NAME
 ERROR_ALREADY_EXISTS = 183
@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
     "smart_focus_guard": True,
     "poll_interval": 0.35,
     "pending_seconds": 15.0,
+    "otp_cooldown_seconds": 120.0,
     "notify_on_fill": True,
     "show_code_in_notification": False,
     "ignore_existing_on_start": True,
@@ -489,6 +490,7 @@ class OtpAutofillApp:
         self.phone = None
         self.phone_hwnd: Optional[int] = None
         self.seen_texts: set[str] = set()
+        self.filled_codes: dict[str, float] = {}
         self.pending: Optional[tuple[str, float, str]] = None
         self.status = "正在启动"
         self.icon = pystray.Icon(
@@ -656,9 +658,34 @@ class OtpAutofillApp:
             self.seen_texts = set()
         LOGGER.info("初始 UI 文本基线=%d 段", len(self.seen_texts))
 
+    def _recently_filled(self, code: str) -> tuple[bool, float]:
+        cooldown = max(
+            0.0,
+            float(self.config.get("otp_cooldown_seconds", 120.0)),
+        )
+        now = time.monotonic()
+        last = self.filled_codes.get(code)
+        if last is None:
+            return False, 0.0
+
+        elapsed = now - last
+        if cooldown == 0.0 or elapsed >= cooldown:
+            self.filled_codes.pop(code, None)
+            return False, elapsed
+
+        return True, elapsed
+
     def _handle_new_text(self, text: str):
         code = extract_otp(text)
         if not code:
+            return
+        duplicate, elapsed = self._recently_filled(code)
+        if duplicate:
+            LOGGER.info(
+                "忽略重复验证码 %s / 距上次填写 %.1f 秒",
+                mask_code(code),
+                elapsed,
+            )
             return
         sender = extract_sender(text)
         deadline = time.time() + float(self.config.get("pending_seconds", 15.0))
@@ -698,7 +725,19 @@ class OtpAutofillApp:
         if not self._is_browser(info2):
             return
 
+        duplicate, elapsed = self._recently_filled(code)
+        if duplicate:
+            LOGGER.info(
+                "忽略重复验证码 %s / 距上次填写 %.1f 秒",
+                mask_code(code),
+                elapsed,
+            )
+            self.pending = None
+            self._set_status("等待验证码")
+            return
+
         type_digits(code)
+        self.filled_codes[code] = time.monotonic()
         sender = extract_sender(source)
         LOGGER.info(
             "已填写验证码 %s / browser=%s / focus=%s",
