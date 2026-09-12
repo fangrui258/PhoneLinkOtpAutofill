@@ -30,7 +30,7 @@ import uiautomation as auto
 
 APP_NAME = "PhoneLinkOtpAutofill"
 APP_DISPLAY_NAME = "Phone Link 验证码自动填写"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE_NAME = APP_NAME
 ERROR_ALREADY_EXISTS = 183
@@ -61,6 +61,8 @@ DEFAULT_CONFIG = {
 }
 
 PHONE_LINK_TITLE_HINTS = ("手机连接", "Phone Link")
+PHONE_LINK_PROCESSES = {"phoneexperiencehost.exe"}
+LEGACY_PHONE_LINK_HOST_PROCESSES = {"applicationframehost.exe"}
 BROWSER_CLASSES = {"Chrome_WidgetWin_1", "MozillaWindowClass"}
 BLOCKED_FOCUS_TYPES = {
     "ButtonControl",
@@ -304,15 +306,31 @@ def enum_visible_windows() -> list[tuple[int, str]]:
     return items
 
 
-def find_phone_link_hwnd() -> tuple[Optional[int], Optional[str]]:
-    windows = enum_visible_windows()
-    for hwnd, title in windows:
-        if any(h.lower() in title.lower() for h in PHONE_LINK_TITLE_HINTS):
+def select_phone_link_window(
+    windows: list[tuple[int, str, str]],
+) -> tuple[Optional[int], Optional[str]]:
+    for hwnd, title, process in windows:
+        if process.lower() in PHONE_LINK_PROCESSES:
             return hwnd, title
-    for hwnd, title in windows:
-        if title.strip().lower() == "iphone":
+
+    exact_titles = {hint.casefold() for hint in PHONE_LINK_TITLE_HINTS}
+    exact_titles.add("iphone")
+    for hwnd, title, process in windows:
+        if (
+            process.lower() in LEGACY_PHONE_LINK_HOST_PROCESSES
+            and title.strip().casefold() in exact_titles
+        ):
             return hwnd, title
+
     return None, None
+
+
+def find_phone_link_hwnd() -> tuple[Optional[int], Optional[str]]:
+    windows = [
+        (hwnd, title, get_process_name_from_hwnd(hwnd))
+        for hwnd, title in enum_visible_windows()
+    ]
+    return select_phone_link_window(windows)
 
 
 def type_digits(code: str) -> None:
@@ -620,7 +638,12 @@ class OtpAutofillApp:
         self.phone = control
         self.phone_hwnd = hwnd
         self._set_status("已连接手机连接")
-        LOGGER.info("已连接 Phone Link: %s / HWND=0x%X", title, hwnd)
+        LOGGER.info(
+            "已连接 Phone Link: %s / process=%s / HWND=0x%X",
+            title,
+            get_process_name_from_hwnd(hwnd),
+            hwnd,
+        )
         return True
 
     def _establish_baseline(self):
