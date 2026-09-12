@@ -28,9 +28,10 @@ import pystray
 from PIL import Image, ImageDraw
 import uiautomation as auto
 
+from release_metadata import VERSION
+
 APP_NAME = "PhoneLinkOtpAutofill"
 APP_DISPLAY_NAME = "Phone Link 验证码自动填写"
-VERSION = "1.0.3"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE_NAME = APP_NAME
 ERROR_ALREADY_EXISTS = 183

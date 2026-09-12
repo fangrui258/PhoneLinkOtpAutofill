@@ -9,7 +9,7 @@
 普通用户不需要安装 Python 或 Anaconda。请前往 GitHub 项目的 **Releases** 页面下载最新的：
 
 ```text
-PhoneLinkOtpAutofill.exe
+PhoneLinkOtpAutofill-vX.Y.Z.exe
 ```
 
 同时提供的 `SHA256SUMS.txt` 可用于校验下载文件是否完整。
@@ -72,12 +72,12 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 完成后得到：
 
 ```text
-dist\PhoneLinkOtpAutofill.exe
+dist\PhoneLinkOtpAutofill-vX.Y.Z.exe
 ```
 
 这是 `--onefile --windowed` 版本，启动时不会出现 PowerShell / CMD 黑框。
 
-GitHub Actions 也会使用 Windows 和 Python 3.10 构建。向 GitHub 推送与代码中 `VERSION` 一致的标签（例如 `v1.0.0`）后，会自动运行测试、生成 EXE、计算 SHA-256 并创建 Release。
+GitHub Actions 也会使用 Windows 和 Python 3.10 构建。向 GitHub 推送与 `release_metadata.py` 中 `VERSION` 一致的标签（例如 `v1.0.4`）后，会自动运行测试、生成带版本号的 EXE、计算 SHA-256 并创建 Release。
 
 ## 托盘菜单
 

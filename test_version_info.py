@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 import PhoneLinkOtpAutofill as otp
+from release_metadata import EXECUTABLE_NAME
 
 
 class VersionInfoTests(unittest.TestCase):
@@ -20,6 +21,10 @@ class VersionInfoTests(unittest.TestCase):
         self.assertRegex(
             contents,
             rf"StringStruct\('ProductVersion',\s*'{re.escape(otp.VERSION)}'\)",
+        )
+        self.assertIn(
+            f"StringStruct('OriginalFilename', '{EXECUTABLE_NAME}')",
+            contents,
         )
 
 

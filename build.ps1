@@ -36,5 +36,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "PyInstaller build failed."
 }
 
+$exeName = (& $condaCommand run -n $EnvironmentName python -c "from release_metadata import EXECUTABLE_NAME; print(EXECUTABLE_NAME)").Trim()
+
 Write-Host "[3/3] Done." -ForegroundColor Green
-Write-Host "EXE: $PSScriptRoot\dist\PhoneLinkOtpAutofill.exe"
+Write-Host "EXE: $PSScriptRoot\dist\$exeName"

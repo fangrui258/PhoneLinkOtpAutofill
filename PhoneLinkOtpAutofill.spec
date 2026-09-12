@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
+from release_metadata import EXECUTABLE_STEM
 
 datas = []
 binaries = []
@@ -31,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='PhoneLinkOtpAutofill',
+    name=EXECUTABLE_STEM,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
